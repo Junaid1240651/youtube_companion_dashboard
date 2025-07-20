@@ -89,7 +89,7 @@ app.get('/auth/google/callback', async (req, res) => {
       status: 'success'
     });
     // Redirect to frontend home page after successful login
-    res.redirect('http://localhost:3001/');
+    res.redirect(process.env.REACT_APP_API_URL);
   } catch (err) {
     res.status(500).send('OAuth error: ' + err.message);
   }
