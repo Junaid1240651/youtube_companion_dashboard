@@ -91,6 +91,7 @@ function App() {
   const openMenu = Boolean(anchorEl);
 
   const backendAPIURL = process.env.REACT_APP_API_URL?.replace(/\/api$/, '');;
+  const frontendAPIURL = process.env.REACT_APP_FRONTEND_URL?.replace(/\/api$/, '');;
   console.log(backendAPIURL);
 
   const handleProfileMenuOpen = (event) => {
@@ -148,7 +149,7 @@ function App() {
   }, []);
 
   const handleGoogleLogin = () => {
-    window.location.href = `${backendAPIURL}/auth/google`;
+    window.location.href = `${frontendAPIURL}/auth/google`;
   };
 
   // Load video data and comments on component mount
