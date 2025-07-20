@@ -6,6 +6,7 @@ import https from 'https';
 import cors from "cors";
 import { dbConnection } from "./db/connection.js";
 import { google } from 'googleapis';
+import EventLogger from './services/eventLogger.js';
 
 // Route imports
 import videoRoutes from "./routes/videoRoutes.js";
@@ -28,7 +29,9 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 const OAUTH_SCOPES = [
-  'https://www.googleapis.com/auth/youtube.force-ssl'
+  'https://www.googleapis.com/auth/youtube.force-ssl',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email'
 ];
 
 // Persistent token store
@@ -72,15 +75,75 @@ app.get('/auth/google/callback', async (req, res) => {
     oauth2Client.setCredentials(tokens);
     oauthTokens = tokens;
     fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
-    res.send('Google OAuth successful! You can now use write operations.');
+    // Log the login event
+    await EventLogger.logEvent({
+      eventType: 'auth',
+      eventAction: 'GET',
+      eventMessage: 'login',
+      userAgent: req.get('User-Agent'),
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      requestData: {
+        method: req.method,
+        url: req.url
+      },
+      status: 'success'
+    });
+    // Redirect to frontend home page after successful login
+    res.redirect('http://localhost:3001/');
   } catch (err) {
     res.status(500).send('OAuth error: ' + err.message);
+  }
+});
+
+// Add logout endpoint
+app.post('/auth/logout', async (req, res) => {
+  try {
+    if (fs.existsSync(TOKEN_PATH)) {
+      fs.unlinkSync(TOKEN_PATH);
+    }
+    oauthTokens = null;
+    // Log the logout event
+    await EventLogger.logEvent({
+      eventType: 'auth',
+      eventAction: 'POST',
+      eventMessage: 'logout',
+      userAgent: req.get('User-Agent'),
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      requestData: {
+        method: req.method,
+        url: req.url
+      },
+      status: 'success'
+    });
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Logout failed', error: err.message });
   }
 });
 
 // Routes
 app.use('/api/videos', videoRoutes);
 app.use('/api', noteRoutes);
+
+// User info endpoint for frontend login state
+app.get('/api/userinfo', async (req, res) => {
+  
+  if (!oauthTokens) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  try {
+    oauth2Client.setCredentials(oauthTokens);
+    const oauth2 = google.oauth2({ auth: oauth2Client, version: 'v2' });
+    const userInfo = await oauth2.userinfo.get();
+    res.json({
+      name: userInfo.data.name,
+      avatarUrl: userInfo.data.picture,
+      email: userInfo.data.email
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch user info' });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

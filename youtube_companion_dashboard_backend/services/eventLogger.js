@@ -1,12 +1,22 @@
 import userQuery from '../helper/dbHelper.js';
 
+// Helper to safely stringify objects (avoids circular structure errors)
+function safeStringify(obj) {
+  try {
+    return JSON.stringify(obj);
+  } catch (e) {
+    return JSON.stringify({ error: 'Could not stringify', message: e.message });
+  }
+}
+
 class EventLogger {
   // Log an event to the database
   static async logEvent(eventData) {
     try {
       const {
         eventType,
-        eventAction,
+        eventAction, 
+        eventMessage, 
         videoId = null,
         commentId = null,
         noteId = null,
@@ -20,26 +30,27 @@ class EventLogger {
 
       const query = `
         INSERT INTO event_logs 
-        (event_type, event_action, video_id, comment_id, note_id, user_agent, ip_address, request_data, response_data, status, error_message)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (event_type, event_action, event_message, video_id, comment_id, note_id, user_agent, ip_address, request_data, response_data, status, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
         eventType,
         eventAction,
+        eventMessage,
         videoId,
         commentId,
         noteId,
         userAgent,
         ipAddress,
-        requestData ? JSON.stringify(requestData) : null,
-        responseData ? JSON.stringify(responseData) : null,
+        requestData ? safeStringify(requestData) : null,
+        responseData ? safeStringify(responseData) : null,
         status,
         errorMessage
       ];
 
       await userQuery(query, values);
-      console.log(`Event logged: ${eventType} - ${eventAction}`);
+      console.log(`Event logged: ${eventType} - ${eventAction} - ${eventMessage}`);
     } catch (error) {
       console.error('Error logging event:', error);
       // Don't throw error to avoid breaking the main functionality
@@ -47,12 +58,29 @@ class EventLogger {
   }
 
   // Log video-related events
-  static async logVideoEvent(eventAction, videoId, requestData = null, responseData = null, errorMessage = null) {
+  static async logVideoEvent(apiMethod, eventMessage, videoId, requestData = null, responseData = null, req = null, errorMessage = null) {
+    let userAgent = null, ipAddress = null;
+    let safeRequestData = requestData;
+    if (req) {
+      userAgent = req.get('User-Agent');
+      ipAddress = req.ip || req.connection?.remoteAddress;
+      safeRequestData = {
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        params: req.params,
+        query: req.query,
+        ...requestData
+      };
+    }
     await this.logEvent({
       eventType: 'video',
-      eventAction,
+      eventAction: apiMethod, // e.g., 'GET', 'POST'
+      eventMessage,           // e.g., 'fetch_comments'
       videoId,
-      requestData,
+      userAgent,
+      ipAddress,
+      requestData: safeRequestData,
       responseData,
       errorMessage,
       status: errorMessage ? 'error' : 'success'
@@ -60,13 +88,30 @@ class EventLogger {
   }
 
   // Log comment-related events
-  static async logCommentEvent(eventAction, videoId, commentId, requestData = null, responseData = null, errorMessage = null) {
+  static async logCommentEvent(apiMethod, eventMessage, videoId, commentId, requestData = null, responseData = null, req = null, errorMessage = null) {
+    let userAgent = null, ipAddress = null;
+    let safeRequestData = requestData;
+    if (req) {
+      userAgent = req.get('User-Agent');
+      ipAddress = req.ip || req.connection?.remoteAddress;
+      safeRequestData = {
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        params: req.params,
+        query: req.query,
+        ...requestData
+      };
+    }
     await this.logEvent({
       eventType: 'comment',
-      eventAction,
+      eventAction: apiMethod,
+      eventMessage,
       videoId,
       commentId,
-      requestData,
+      userAgent,
+      ipAddress,
+      requestData: safeRequestData,
       responseData,
       errorMessage,
       status: errorMessage ? 'error' : 'success'
@@ -74,13 +119,30 @@ class EventLogger {
   }
 
   // Log note-related events
-  static async logNoteEvent(eventAction, videoId, noteId, requestData = null, responseData = null, errorMessage = null) {
+  static async logNoteEvent(apiMethod, eventMessage, videoId, noteId, requestData = null, responseData = null, req = null, errorMessage = null) {
+    let userAgent = null, ipAddress = null;
+    let safeRequestData = requestData;
+    if (req) {
+      userAgent = req.get('User-Agent');
+      ipAddress = req.ip || req.connection?.remoteAddress;
+      safeRequestData = {
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        params: req.params,
+        query: req.query,
+        ...requestData
+      };
+    }
     await this.logEvent({
       eventType: 'note',
-      eventAction,
+      eventAction: apiMethod,
+      eventMessage,
       videoId,
       noteId,
-      requestData,
+      userAgent,
+      ipAddress,
+      requestData: safeRequestData,
       responseData,
       errorMessage,
       status: errorMessage ? 'error' : 'success'

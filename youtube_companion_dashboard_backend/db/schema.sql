@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS event_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     event_type VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
     event_action VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    event_message VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
     video_id VARCHAR(255),
     comment_id VARCHAR(255),
     note_id INT,

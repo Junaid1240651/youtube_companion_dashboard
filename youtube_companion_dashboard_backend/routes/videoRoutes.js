@@ -12,5 +12,6 @@ router.get('/:videoId/comments', VideoController.getVideoComments);
 router.post('/:videoId/comments', VideoController.addComment);
 router.post('/comments/:commentId/replies', VideoController.addReply);
 router.delete('/comments/:commentId', VideoController.deleteComment);
+router.delete('/comments/:replyId/reply', VideoController.deleteReply);
 
 export default router; 

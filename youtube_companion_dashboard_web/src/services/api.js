@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://youtube-companion-dashboard-sigma.vercel.app/';
 
 // Create axios instance
 const api = axios.create({
@@ -58,6 +58,10 @@ export const videoAPI = {
   // Delete comment
   deleteComment: (commentId) => 
     api.delete(`/videos/comments/${commentId}`),
+  
+  // Delete reply
+  deleteReply: (replyId) => 
+    api.delete(`/videos/comments/${replyId}/reply`),
 };
 
 // Notes API methods

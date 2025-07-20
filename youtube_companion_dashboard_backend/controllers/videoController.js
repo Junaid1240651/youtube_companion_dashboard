@@ -16,7 +16,7 @@ class VideoController {
       await VideoController.saveVideoToDatabase(videoDetails);
       
       // Log the event
-      await EventLogger.logVideoEvent('fetch_details', videoId, { videoId }, videoDetails);
+      await EventLogger.logVideoEvent('GET', 'fetch_details', videoId, { videoId }, videoDetails, req);
       
       res.json({
         success: true,
@@ -26,7 +26,7 @@ class VideoController {
       console.error('Error getting video details:', error);
       
       // Log error event
-      await EventLogger.logVideoEvent('fetch_details', req.params.videoId, { videoId: req.params.videoId }, null, error.message);
+      await EventLogger.logVideoEvent('GET', 'fetch_details', req.params.videoId, { videoId: req.params.videoId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -57,7 +57,7 @@ class VideoController {
       await VideoController.updateVideoInDatabase(videoId, updatedVideo);
       
       // Log the event
-      await EventLogger.logVideoEvent('update', videoId, { videoId, title, description }, updatedVideo);
+      await EventLogger.logVideoEvent('PUT', title ? 'change_title' : 'change_description', videoId, { videoId, title, description }, updatedVideo, req);
       
       res.json({
         success: true,
@@ -67,7 +67,7 @@ class VideoController {
       console.error('Error updating video:', error);
       
       // Log error event
-      await EventLogger.logVideoEvent('update', req.params.videoId, req.body, null, error.message);
+      await EventLogger.logVideoEvent('PUT', req.params.videoId, req.body, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -91,7 +91,7 @@ class VideoController {
       await VideoController.saveCommentsToDatabase(comments);
       
       // Log the event
-      await EventLogger.logVideoEvent('fetch_comments', videoId, { videoId, maxResults }, { count: comments.length });
+      await EventLogger.logVideoEvent('GET', 'fetch_comments', videoId, { videoId, maxResults }, { count: comments.length }, req);
       
       res.json({
         success: true,
@@ -101,7 +101,7 @@ class VideoController {
       console.error('Error getting video comments:', error);
       
       // Log error event
-      await EventLogger.logVideoEvent('fetch_comments', req.params.videoId, req.query, null, error.message);
+      await EventLogger.logVideoEvent('GET', 'fetch_comments', req.params.videoId, req.query, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -132,7 +132,7 @@ class VideoController {
       await VideoController.saveCommentToDatabase(comment);
       
       // Log the event
-      await EventLogger.logCommentEvent('add', videoId, comment.id, { videoId, text }, comment);
+      await EventLogger.logCommentEvent('POST', 'add_comment', videoId, comment.id, { videoId, text }, comment, req);
       
       res.json({
         success: true,
@@ -142,7 +142,7 @@ class VideoController {
       console.error('Error adding comment:', error);
       
       // Log error event
-      await EventLogger.logCommentEvent('add', req.params.videoId, null, req.body, null, error.message);
+      await EventLogger.logCommentEvent('POST', req.params.videoId, null, req.body, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -173,7 +173,7 @@ class VideoController {
       await VideoController.saveCommentToDatabase(reply);
       
       // Log the event
-      await EventLogger.logCommentEvent('add_reply', reply.videoId, reply.id, { commentId, text }, reply);
+      await EventLogger.logCommentEvent('POST', 'add_reply', reply.videoId, reply.id, { commentId, text }, reply, req);
       
       res.json({
         success: true,
@@ -183,7 +183,7 @@ class VideoController {
       console.error('Error adding reply:', error);
       
       // Log error event
-      await EventLogger.logCommentEvent('add_reply', null, req.params.commentId, req.body, null, error.message);
+      await EventLogger.logCommentEvent('POST', null, req.params.commentId, req.body, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -198,15 +198,15 @@ class VideoController {
     try {
       const { commentId } = req.params;
       
+      // Log the event BEFORE deleting the comment from the database
+      await EventLogger.logCommentEvent('DELETE', 'delete_comment', null, commentId, { commentId }, { success: true }, req);
+      
       // Delete comment from YouTube
       const youtubeService = new YouTubeService();
       await youtubeService.deleteComment(commentId);
       
       // Delete comment from database
       await VideoController.deleteCommentFromDatabase(commentId);
-      
-      // Log the event
-      await EventLogger.logCommentEvent('delete', null, commentId, { commentId }, { success: true });
       
       res.json({
         success: true,
@@ -216,13 +216,37 @@ class VideoController {
       console.error('Error deleting comment:', error);
       
       // Log error event
-      await EventLogger.logCommentEvent('delete', null, req.params.commentId, { commentId: req.params.commentId }, null, error.message);
+      await EventLogger.logCommentEvent('DELETE', 'delete_comment', null, req.params.commentId, { commentId: req.params.commentId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
         message: 'Error deleting comment',
         error: error.message
       });
+    }
+  }
+
+  // Delete reply
+  static async deleteReply(req, res) {
+    try {
+      const { replyId } = req.params;
+      // Optionally, fetch the reply to check if it exists and is a reply (has parentId)
+      const replyRows = await userQuery('SELECT * FROM comments WHERE id = ?', [replyId]);
+      if (!replyRows.length || !replyRows[0].parent_id) {
+        return res.status(404).json({ success: false, message: 'Reply not found' });
+      }
+      // Log the event BEFORE deleting the reply from the database
+      await EventLogger.logCommentEvent('DELETE', 'delete_reply', null, replyId, { replyId }, { success: true }, req);
+      // Delete reply from YouTube
+      const youtubeService = new YouTubeService();
+      await youtubeService.deleteComment(replyId);
+      // Delete reply from database
+      await VideoController.deleteCommentFromDatabase(replyId);
+      res.json({ success: true, message: 'Reply deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting reply:', error);
+      await EventLogger.logCommentEvent('DELETE', 'delete_reply', null, req.params.replyId, { replyId: req.params.replyId }, null, req, error.message);
+      res.status(500).json({ success: false, message: 'Error deleting reply', error: error.message });
     }
   }
 
@@ -284,6 +308,14 @@ class VideoController {
   }
 
   static async saveCommentToDatabase(comment) {
+    let videoId = comment.videoId;
+    // If videoId is missing (for replies), fetch from parent comment
+    if (!videoId && comment.parentId) {
+      const parent = await userQuery('SELECT video_id FROM comments WHERE id = ?', [comment.parentId]);
+      if (parent.length > 0) {
+        videoId = parent[0].video_id;
+      }
+    }
     const query = `
       INSERT INTO comments (id, video_id, author_name, author_channel_id, text, like_count, published_at, parent_id, is_owner_comment)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -296,12 +328,12 @@ class VideoController {
     
     const values = [
       comment.id,
-      comment.videoId,
+      videoId,
       comment.authorName,
       comment.authorChannelId,
       comment.text,
       comment.likeCount,
-      toMySQLDateTime(comment.publishedAt), // convert here
+      toMySQLDateTime(comment.publishedAt),
       comment.parentId,
       comment.isOwnerComment
     ];

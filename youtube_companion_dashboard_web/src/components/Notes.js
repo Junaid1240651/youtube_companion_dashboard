@@ -47,6 +47,9 @@ const Notes = ({ videoId }) => {
   const [editingNote, setEditingNote] = useState(null);
   const [filter, setFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [noteToDelete, setNoteToDelete] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -126,11 +129,12 @@ const Notes = ({ videoId }) => {
     setOpenDialog(true);
   };
 
-  const handleDelete = async (noteId) => {
-    if (!window.confirm('Are you sure you want to delete this note?')) {
+  const handleDelete = async (noteId, silent = false) => {
+    if (!silent) {
+      setNoteToDelete(notes.find(n => n.id === noteId));
+      setConfirmOpen(true);
       return;
     }
-
     try {
       setLoading(true);
       await notesAPI.deleteNote(noteId);
@@ -142,6 +146,21 @@ const Notes = ({ videoId }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (noteToDelete) {
+      setConfirmingDelete(true);
+      await handleDelete(noteToDelete.id, true);
+      setNoteToDelete(null);
+      setConfirmOpen(false);
+      setConfirmingDelete(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setNoteToDelete(null);
+    setConfirmOpen(false);
   };
 
   const handleToggleCompletion = async (noteId) => {
@@ -318,7 +337,10 @@ const Notes = ({ videoId }) => {
                     <Tooltip title="Delete">
                       <IconButton 
                         size="small" 
-                        onClick={() => handleDelete(note.id)}
+                        onClick={() => {
+                          setNoteToDelete(note);
+                          setConfirmOpen(true);
+                        }}
                         color="error"
                       >
                         <DeleteIcon fontSize="small" />
@@ -401,6 +423,17 @@ const Notes = ({ videoId }) => {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Confirmation Dialog for Deletion */}
+      <Dialog open={confirmOpen} onClose={handleCancelDelete}>
+        <DialogTitle>Are you sure you want to delete this note?</DialogTitle>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} disabled={confirmingDelete}>Cancel</Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" disabled={confirmingDelete} startIcon={confirmingDelete ? <CircularProgress size={16} color="inherit" /> : null}>
+            {confirmingDelete ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Floating Action Button */}

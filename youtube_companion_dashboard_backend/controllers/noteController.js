@@ -16,7 +16,7 @@ class NoteController {
       const notes = await userQuery(query, [videoId]);
       
       // Log the event
-      await EventLogger.logNoteEvent('fetch_all', videoId, null, { videoId }, { count: notes.length });
+      await EventLogger.logNoteEvent('GET', 'fetch_notes', videoId, null, { videoId }, { count: notes.length }, req);
       
       res.json({
         success: true,
@@ -26,7 +26,7 @@ class NoteController {
       console.error('Error getting notes:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('fetch_all', req.params.videoId, null, { videoId: req.params.videoId }, null, error.message);
+      await EventLogger.logNoteEvent('GET', 'fetch_notes', req.params.videoId, null, { videoId: req.params.videoId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -54,7 +54,7 @@ class NoteController {
       const note = notes[0];
       
       // Log the event
-      await EventLogger.logNoteEvent('fetch_single', note.video_id, noteId, { noteId }, note);
+      await EventLogger.logNoteEvent('GET', 'fetch_single', note.video_id, noteId, { noteId }, note, req);
       
       res.json({
         success: true,
@@ -64,7 +64,7 @@ class NoteController {
       console.error('Error getting note:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('fetch_single', null, req.params.noteId, { noteId: req.params.noteId }, null, error.message);
+      await EventLogger.logNoteEvent('GET', 'fetch_single', null, req.params.noteId, { noteId: req.params.noteId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -101,7 +101,7 @@ class NoteController {
       const createdNote = await userQuery('SELECT * FROM notes WHERE id = ?', [noteId]);
       
       // Log the event
-      await EventLogger.logNoteEvent('create', videoId, noteId, { videoId, title, content, category, priority }, createdNote[0]);
+      await EventLogger.logNoteEvent('POST', 'create_note', videoId, noteId, { videoId, title, content, category, priority }, createdNote[0], req);
       
       res.status(201).json({
         success: true,
@@ -111,7 +111,7 @@ class NoteController {
       console.error('Error creating note:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('create', req.params.videoId, null, req.body, null, error.message);
+      await EventLogger.logNoteEvent('POST', 'create_note', req.params.videoId, null, req.body, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -186,7 +186,7 @@ class NoteController {
       const updatedNote = updatedNotes[0];
       
       // Log the event
-      await EventLogger.logNoteEvent('update', existingNote.video_id, noteId, { noteId, ...req.body }, updatedNote);
+      await EventLogger.logNoteEvent('PUT', 'update_note', existingNote.video_id, noteId, { noteId, ...req.body }, updatedNote, req);
       
       res.json({
         success: true,
@@ -196,7 +196,7 @@ class NoteController {
       console.error('Error updating note:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('update', null, req.params.noteId, req.body, null, error.message);
+      await EventLogger.logNoteEvent('PUT', 'update_note', null, req.params.noteId, req.body, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -222,11 +222,11 @@ class NoteController {
       
       const existingNote = existingNotes[0];
       
+      // Log the event BEFORE deleting the note from the database
+      await EventLogger.logNoteEvent('DELETE', 'delete_note', existingNote.video_id, noteId, { noteId }, { success: true }, req);
+      
       const query = 'DELETE FROM notes WHERE id = ?';
       await userQuery(query, [noteId]);
-      
-      // Log the event
-      await EventLogger.logNoteEvent('delete', existingNote.video_id, noteId, { noteId }, { success: true });
       
       res.json({
         success: true,
@@ -236,7 +236,7 @@ class NoteController {
       console.error('Error deleting note:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('delete', null, req.params.noteId, { noteId: req.params.noteId }, null, error.message);
+      await EventLogger.logNoteEvent('DELETE', 'delete_note', null, req.params.noteId, { noteId: req.params.noteId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -268,7 +268,7 @@ class NoteController {
       const notes = await userQuery(query, [videoId, category]);
       
       // Log the event
-      await EventLogger.logNoteEvent('fetch_by_category', videoId, null, { videoId, category }, { count: notes.length });
+      await EventLogger.logNoteEvent('GET', 'fetch_by_category', videoId, null, { videoId, category }, { count: notes.length }, req);
       
       res.json({
         success: true,
@@ -278,7 +278,7 @@ class NoteController {
       console.error('Error getting notes by category:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('fetch_by_category', req.params.videoId, null, req.query, null, error.message);
+      await EventLogger.logNoteEvent('GET', 'fetch_by_category', req.params.videoId, null, req.query, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -310,7 +310,7 @@ class NoteController {
       const notes = await userQuery(query, [videoId, priority]);
       
       // Log the event
-      await EventLogger.logNoteEvent('fetch_by_priority', videoId, null, { videoId, priority }, { count: notes.length });
+      await EventLogger.logNoteEvent('GET', 'fetch_by_priority', videoId, null, { videoId, priority }, { count: notes.length }, req);
       
       res.json({
         success: true,
@@ -320,7 +320,7 @@ class NoteController {
       console.error('Error getting notes by priority:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('fetch_by_priority', req.params.videoId, null, req.query, null, error.message);
+      await EventLogger.logNoteEvent('GET', 'fetch_by_priority', req.params.videoId, null, req.query, null, req, error.message);
       
       res.status(500).json({
         success: false,
@@ -355,7 +355,7 @@ class NoteController {
       const updatedNote = updatedNotes[0];
       
       // Log the event
-      await EventLogger.logNoteEvent('toggle_completion', existingNote.video_id, noteId, { noteId, isCompleted: newCompletionStatus }, updatedNote);
+      await EventLogger.logNoteEvent('PUT', 'toggle_completion', existingNote.video_id, noteId, { noteId, isCompleted: newCompletionStatus }, updatedNote, req);
       
       res.json({
         success: true,
@@ -365,7 +365,7 @@ class NoteController {
       console.error('Error toggling note completion:', error);
       
       // Log error event
-      await EventLogger.logNoteEvent('toggle_completion', null, req.params.noteId, { noteId: req.params.noteId }, null, error.message);
+      await EventLogger.logNoteEvent('PUT', 'toggle_completion', null, req.params.noteId, { noteId: req.params.noteId }, null, req, error.message);
       
       res.status(500).json({
         success: false,
