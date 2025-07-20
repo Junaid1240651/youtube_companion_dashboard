@@ -59,24 +59,31 @@ oauth2Client.on('tokens', (tokens) => {
 
 // Route: Start OAuth2 flow
 app.get('/auth/google', (req, res) => {
+  console.log('[OAuth] /auth/google - Received request');
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: OAUTH_SCOPES,
     prompt: 'consent',
   });
+  console.log('[OAuth] /auth/google - Redirecting to:', url);
   res.redirect(url);
 });
 
 // Route: OAuth2 callback
 app.get('/auth/google/callback', async (req, res) => {
   const code = req.query.code;
-  res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
-  if (!code) return res.status(400).send('No code provided');
+  console.log('[OAuth] /auth/google/callback - Received request with code:', code);
+  if (!code) {
+    console.log('[OAuth] /auth/google/callback - No code provided');
+    return res.redirect('http://localhost:3001/?error=NoCodeProvided');
+  }
   try {
+    console.log('[OAuth] /auth/google/callback - Exchanging code for tokens...');
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
     oauthTokens = tokens;
     fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+    console.log('[OAuth] /auth/google/callback - Token exchange successful. Tokens saved to file.');
     // Log the login event
     await EventLogger.logEvent({
       eventType: 'auth',
@@ -90,19 +97,21 @@ app.get('/auth/google/callback', async (req, res) => {
       },
       status: 'success'
     });
-    // Redirect to frontend home page after successful login
-    res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
+    console.log('[OAuth] /auth/google/callback - Redirecting to frontend.');
+    res.redirect('http://localhost:3001/');
   } catch (err) {
-    res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
-    res.status(500).send('OAuth error: ' + err.message);
+    console.log('[OAuth] /auth/google/callback - Error during token exchange:', err);
+    res.redirect('http://localhost:3001/?error=OAuthError');
   }
 });
 
 // Add logout endpoint
 app.post('/auth/logout', async (req, res) => {
+  console.log('[Auth] /auth/logout - Received logout request');
   try {
     if (fs.existsSync(TOKEN_PATH)) {
       fs.unlinkSync(TOKEN_PATH);
+      console.log('[Auth] /auth/logout - Token file deleted');
     }
     oauthTokens = null;
     // Log the logout event
@@ -120,6 +129,7 @@ app.post('/auth/logout', async (req, res) => {
     });
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
+    console.log('[Auth] /auth/logout - Error during logout:', err);
     res.status(500).json({ success: false, message: 'Logout failed', error: err.message });
   }
 });
@@ -130,20 +140,23 @@ app.use('/api', noteRoutes);
 
 // User info endpoint for frontend login state
 app.get('/api/userinfo', async (req, res) => {
-  
+  console.log('[UserInfo] /api/userinfo - Received request');
   if (!oauthTokens) {
+    console.log('[UserInfo] /api/userinfo - Not logged in (no tokens)');
     return res.status(401).json({ error: 'Not logged in' });
   }
   try {
     oauth2Client.setCredentials(oauthTokens);
     const oauth2 = google.oauth2({ auth: oauth2Client, version: 'v2' });
     const userInfo = await oauth2.userinfo.get();
+    console.log('[UserInfo] /api/userinfo - User info fetched:', userInfo.data);
     res.json({
       name: userInfo.data.name,
       avatarUrl: userInfo.data.picture,
       email: userInfo.data.email
     });
   } catch (err) {
+    console.log('[UserInfo] /api/userinfo - Error fetching user info:', err);
     res.status(500).json({ error: 'Failed to fetch user info' });
   }
 });
