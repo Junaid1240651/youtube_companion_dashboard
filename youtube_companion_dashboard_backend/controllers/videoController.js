@@ -65,11 +65,12 @@ class VideoController {
       });
     } catch (error) {
       console.error('Error updating video:', error);
-      
-      // Log error event
-      await EventLogger.logVideoEvent('PUT', req.params.videoId, req.body, null, req, error.message);
-      
-      res.status(500).json({
+      try {
+        await EventLogger.logVideoEvent('PUT', 'update_video_error', req.params.videoId, req.body, null, req, error.message);
+      } catch (logErr) {
+        console.error('Error logging event:', logErr);
+      }
+      return res.status(500).json({
         success: false,
         message: 'Error updating video',
         error: error.message

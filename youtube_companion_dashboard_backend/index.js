@@ -69,6 +69,7 @@ app.get('/auth/google', (req, res) => {
 // Route: OAuth2 callback
 app.get('/auth/google/callback', async (req, res) => {
   const code = req.query.code;
+  res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
   if (!code) return res.status(400).send('No code provided');
   try {
     const { tokens } = await oauth2Client.getToken(code);
@@ -89,8 +90,9 @@ app.get('/auth/google/callback', async (req, res) => {
       status: 'success'
     });
     // Redirect to frontend home page after successful login
-    res.redirect('/'); // <-- THIS IS THE FIX
+    res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
   } catch (err) {
+    res.redirect(process.env.FRONTEND_URL); // <-- THIS IS THE FIX
     res.status(500).send('OAuth error: ' + err.message);
   }
 });

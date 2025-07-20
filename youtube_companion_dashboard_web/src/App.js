@@ -63,7 +63,7 @@ function decodeHtmlEntities(str) {
 
 function App() {
   // Default video ID - you can change this to your uploaded video ID
-  const [videoId, setVideoId] = useState('2ixomGQdCXk'); // Replace with your video ID
+  const [videoId, setVideoId] = useState('dXcBh6d5g3U'); // Replace with your video ID
   const [videoData, setVideoData] = useState(null);
   const [comments, setComments] = useState([]);
   const [editingTitle, setEditingTitle] = useState(false);
