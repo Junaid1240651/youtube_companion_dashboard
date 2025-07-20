@@ -90,6 +90,8 @@ function App() {
   const [anchorEl, setAnchorEl] = useState(null);
   const openMenu = Boolean(anchorEl);
 
+  const backendAPIURL = process.env.REACT_APP_API_URL?.replace(/\/api$/, '');;
+  console.log(backendAPIURL);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -103,7 +105,7 @@ function App() {
     handleMenuClose();
     try {
       // Try to call backend logout endpoint if it exists
-      await fetch('http://localhost:3000/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch(`${backendAPIURL}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch (e) {
       // Ignore errors if endpoint does not exist
     }
@@ -115,7 +117,7 @@ function App() {
     let cancelled = false;
 
     const tryFetch = () => {
-      fetch('http://localhost:3000/api/userinfo')
+      fetch(`${backendAPIURL}/api/userinfo`)
         .then(res => res.ok ? res.json() : null)
         .then(data => {
           if (data && data.name) {
@@ -146,7 +148,7 @@ function App() {
   }, []);
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:3000/auth/google';
+    window.location.href = `${backendAPIURL}/auth/google`;
   };
 
   // Load video data and comments on component mount
@@ -184,7 +186,7 @@ function App() {
 
   // Helper: Redirect to Google OAuth if login is required
   const handleOAuthRedirect = () => {
-    window.location.href = 'http://localhost:3000/auth/google'; // Adjust if backend is on a different host/port
+    window.location.href = `${backendAPIURL}/auth/google`; // Adjust if backend is on a different host/port
   };
 
   const handleSaveTitle = async () => {
