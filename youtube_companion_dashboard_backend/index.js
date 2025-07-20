@@ -98,7 +98,7 @@ app.get('/auth/google/callback', async (req, res) => {
       status: 'success'
     });
     console.log('[OAuth] /auth/google/callback - Redirecting to frontend.');
-    res.redirect('http://localhost:3001/');
+    res.redirect(process.env.FRONTEND_URL);
   } catch (err) {
     console.log('[OAuth] /auth/google/callback - Error during token exchange:', err);
     res.redirect('http://localhost:3001/?error=OAuthError');
