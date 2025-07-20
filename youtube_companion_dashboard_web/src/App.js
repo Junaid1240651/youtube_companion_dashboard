@@ -149,7 +149,7 @@ function App() {
   }, []);
 
   const handleGoogleLogin = () => {
-    window.location.href = `${frontendAPIURL}/auth/google`;
+    window.location.href = `${backendAPIURL}/auth/google`;
   };
 
   // Load video data and comments on component mount
