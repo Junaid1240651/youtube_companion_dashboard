@@ -98,4 +98,9 @@ export const healthAPI = {
   check: () => api.get('/health'),
 };
 
+export const userAPI = {
+  getUserInfo: () => api.get('/userinfo', { withCredentials: true }),
+  logout: () => api.post('/auth/logout', {}, { withCredentials: true })
+};
+
 export default api; 

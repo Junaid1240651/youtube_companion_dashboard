@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -7,63 +7,32 @@ import {
   Typography,
   Card,
   CardContent,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Chip,
-  Avatar,
-  Divider,
-  Paper,
   CircularProgress,
-  Tooltip,
-  Tabs,
-  Tab,
-  Menu,
-  MenuItem,
-  Collapse,
-  Snackbar,
-  Alert as MuiAlert
 } from '@mui/material';
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Reply as ReplyIcon,
-  Add as AddIcon,
-  PlayArrow as PlayIcon,
-  Visibility as VisibilityIcon,
-  ThumbUp as ThumbUpIcon,
-  Comment as CommentIcon,
-  Save as SaveIcon,
-  Cancel as CancelIcon,
-  Note as NoteIcon
-} from '@mui/icons-material';
-import { videoAPI } from './services/api.js';
-import Notes from './components/Notes.js';
+import LoginButton from './components/auth/LoginButton';
+import UserProfileMenu from './components/auth/UserProfileMenu';
+import VideoPlayer from './components/video/VideoPlayer';
+import VideoDetails from './components/video/VideoDetails';
+import CommentList from './components/comments/CommentList';
+import CommentForm from './components/comments/CommentForm';
+import NotesList from './components/notes/NotesList';
+import NoteItem from './components/notes/NoteItem';
 import './App.css';
-import GoogleIcon from '@mui/icons-material/Google';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import LogoutIcon from '@mui/icons-material/Logout';
-
-// Utility to decode HTML entities
-function decodeHtmlEntities(str) {
-  if (!str) return '';
-  const txt = document.createElement('textarea');
-  txt.innerHTML = str;
-  return txt.value;
-}
+import { videoAPI, notesAPI, userAPI } from './services/api.js';
+import AlertMessage from './components/common/AlertMessage';
+import TabsPanel from './components/common/TabsPanel';
+import CommentIcon from '@mui/icons-material/Comment';
+import NoteIcon from '@mui/icons-material/Note';
+import ReplyDialog from './components/comments/ReplyDialog';
+import NotesHeader from './components/notes/NotesHeader';
+import NoteDialog from './components/notes/NoteDialog';
+import ConfirmDialog from './components/common/ConfirmDialog';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 function App() {
   // Default video ID - you can change this to your uploaded video ID
-  const [videoId, setVideoId] = useState('dXcBh6d5g3U'); // Replace with your video ID
+  const [videoId] = useState('dXcBh6d5g3U'); // Replace with your video ID
   const [videoData, setVideoData] = useState(null);
   const [comments, setComments] = useState([]);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -78,11 +47,22 @@ function App() {
   const [activeTab, setActiveTab] = useState(0);
   const [expandedReplies, setExpandedReplies] = useState({}); // { [commentId]: boolean }
   const [alert, setAlert] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [replyingId, setReplyingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, type: 'comment' | 'reply' }
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [notes, setNotes] = useState([]); // State for notes
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    category: 'general',
+    priority: 'medium'
+  });
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [noteConfirmDeleteOpen, setNoteConfirmDeleteOpen] = useState(false);
+  const [noteDeleteTarget, setNoteDeleteTarget] = useState(null); // note id
+  const [noteStatusAlert, setNoteStatusAlert] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
 
   // Simulate user authentication state (for demo)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -91,8 +71,6 @@ function App() {
   const openMenu = Boolean(anchorEl);
 
   const backendAPIURL = process.env.REACT_APP_API_URL?.replace(/\/api$/, '');;
-  const frontendAPIURL = process.env.REACT_APP_FRONTEND_URL?.replace(/\/api$/, '');;
-  console.log(backendAPIURL);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -105,8 +83,7 @@ function App() {
     setUserProfile(null);
     handleMenuClose();
     try {
-      // Try to call backend logout endpoint if it exists
-      await fetch(`${backendAPIURL}/auth/logout`, { method: 'POST', credentials: 'include' });
+      await userAPI.logout();
     } catch (e) {
       // Ignore errors if endpoint does not exist
     }
@@ -118,8 +95,8 @@ function App() {
     let cancelled = false;
 
     const tryFetch = () => {
-      fetch(`${backendAPIURL}/api/userinfo`)
-        .then(res => res.ok ? res.json() : null)
+      userAPI.getUserInfo()
+        .then(res => res.data)
         .then(data => {
           if (data && data.name) {
             setIsLoggedIn(true);
@@ -152,38 +129,54 @@ function App() {
     window.location.href = `${backendAPIURL}/auth/google`;
   };
 
-  // Load video data and comments on component mount
-  useEffect(() => {
-    if (isLoggedIn && videoId) {
-      loadVideoData();
-      loadComments();
-    }
-  }, [isLoggedIn, videoId]);
-
-
-
-  const loadVideoData = async () => {
+  const loadVideoData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await videoAPI.getVideoDetails(videoId);
-      setVideoData(response.data.data);
-      setNewTitle(response.data.data.title);
-      setNewDescription(response.data.data.description);
+      const res = await videoAPI.getVideoDetails(videoId);
+      setVideoData(res.data.data);
+      setNewTitle(res.data.data.title);
+      setNewDescription(res.data.data.description);
     } catch (error) {
       console.error('Error loading video data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [videoId]);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
+    function markOwner(comments, userChannelId) {
+      return comments.map(comment => ({
+        ...comment,
+        isOwnerComment: comment.authorChannelId === userChannelId,
+        replies: comment.replies ? markOwner(comment.replies, userChannelId) : []
+      }));
+    }
     try {
-      const response = await videoAPI.getComments(videoId);
-      setComments(response.data.data);
+      const res = await videoAPI.getComments(videoId);
+      const userChannelId = userProfile?.channelId;
+      const commentsWithOwner = markOwner(res.data.data, userChannelId);
+      setComments(commentsWithOwner);
     } catch (error) {
       console.error('Error loading comments:', error);
     }
-  };
+  }, [videoId, userProfile]);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const res = await notesAPI.getNotes(videoId);
+      setNotes(res.data.data);
+    } catch (error) {
+      console.error('Error loading notes:', error);
+    }
+  }, [videoId]);
+
+  useEffect(() => {
+    if (isLoggedIn && videoId) {
+      loadVideoData();
+      loadComments();
+      loadNotes();
+    }
+  }, [isLoggedIn, videoId, loadVideoData, loadComments, loadNotes]);
 
   // Helper: Redirect to Google OAuth if login is required
   const handleOAuthRedirect = () => {
@@ -195,7 +188,7 @@ function App() {
     
     try {
       setLoading(true);
-      const response = await videoAPI.updateVideo(videoId, { title: newTitle });
+      await videoAPI.updateVideo(videoId, { title: newTitle });
       setVideoData(prev => ({ ...prev, title: newTitle }));
       setEditingTitle(false);
       setAlert({ message: 'Title updated successfully!', severity: 'success' });
@@ -234,7 +227,10 @@ function App() {
     try {
       setLoading(true);
       const response = await videoAPI.addComment(videoId, newComment);
-      setComments(prev => [response.data.data, ...prev]);
+      setComments(prev => [
+        { ...response.data.data, replies: [] }, // Ensure replies is always an array
+        ...prev
+      ]);
       setNewComment('');
       setAlert({ message: 'Comment added successfully!', severity: 'success' });
     } catch (error) {
@@ -249,52 +245,50 @@ function App() {
   };
 
   const handleDeleteComment = async (commentId, silent = false, type = 'comment') => {
-    if (!silent) {
-      setDeleteTarget({ id: commentId, type }); // type: 'comment' or 'reply'
-      setConfirmDeleteOpen(true);
-      return;
-    }
+    setLoading(true);
+    
     try {
-      setLoading(true);
       if (type === 'reply') {
         await videoAPI.deleteReply(commentId);
+        setComments(prev => {
+          const updated = prev
+            .map(comment => {
+              const newReplies = (comment.replies || []).filter(reply => reply.id !== commentId);
+              if (newReplies.length !== (comment.replies || []).length) {
+                return { ...comment, replies: newReplies };
+              }
+              return comment;
+            })
+            .filter(comment => true); // No top-level removal for replies
+          return updated;
+        });
+        setAlert({ message: 'Reply deleted successfully!', severity: 'success' });
       } else {
         await videoAPI.deleteComment(commentId);
+        setComments(prev => prev.filter(comment => comment.id !== commentId));
+        setAlert({ message: 'Comment deleted successfully!', severity: 'success' });
       }
-      setComments(prev =>
-        prev
-          .map(comment => {
-            // Remove reply from replies array if it exists
-            const newReplies = (comment.replies || []).filter(reply => reply.id !== commentId);
-            if (newReplies.length !== (comment.replies || []).length) {
-              return { ...comment, replies: newReplies };
-            }
-            return comment;
-          })
-          // Remove top-level comment if it matches
-          .filter(comment => type === 'comment' ? comment.id !== commentId : true)
-      );
-      setAlert({ message: type === 'reply' ? 'Reply deleted successfully!' : 'Comment deleted successfully!', severity: 'success' });
     } catch (error) {
-      console.error('Error deleting', type, error);
+      setAlert({ message: `Error deleting ${type === 'reply' ? 'reply' : 'comment'}`, severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleRequestDelete = (id, type) => {
+    
+    setDeleteTarget({ id, type });
+    setConfirmDeleteOpen(true);
+  };
+
   const handleConfirmDelete = async () => {
     if (deleteTarget) {
-      setConfirmingDelete(true);
+      setLoading(true);
       await handleDeleteComment(deleteTarget.id, true, deleteTarget.type);
       setDeleteTarget(null);
       setConfirmDeleteOpen(false);
-      setConfirmingDelete(false);
+      setLoading(false);
     }
-  };
-
-  const handleCancelDelete = () => {
-    setDeleteTarget(null);
-    setConfirmDeleteOpen(false);
   };
 
   const handleAddReply = async (commentId) => {
@@ -302,12 +296,11 @@ function App() {
     
     try {
       setLoading(true);
-      setReplyingId(commentId);
       const response = await videoAPI.addReply(commentId, replyText);
       
       setComments(prev => prev.map(comment => 
         comment.id === commentId 
-          ? { ...comment, replies: [...comment.replies, response.data.data] }
+          ? { ...comment, replies: Array.isArray(comment.replies) ? [...comment.replies, response.data.data] : [response.data.data] }
           : comment
       ));
       setExpandedReplies(prev => ({ ...prev, [commentId]: true }));
@@ -324,7 +317,6 @@ function App() {
       console.error('Error adding reply:', error);
     } finally {
       setLoading(false);
-      setReplyingId(null);
     }
   };
 
@@ -346,6 +338,96 @@ function App() {
     return num.toString();
   };
 
+  const handleNoteSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.title.trim()) return;
+    setLoading(true);
+    try {
+      if (editingNote) {
+        await notesAPI.updateNote(editingNote.id, formData);
+        setNotes(prev => prev.map(note =>
+          note.id === editingNote.id ? { ...note, ...formData } : note
+        ));
+        setAlert({ message: 'Note updated successfully!', severity: 'success' });
+      } else {
+        const response = await notesAPI.createNote(videoId, formData);
+        setNotes(prev => [response.data.data, ...prev]);
+        setAlert({ message: 'Note created successfully!', severity: 'success' });
+      }
+      setFormData({ title: '', content: '', category: 'general', priority: 'medium' });
+      setEditingNote(null);
+      setNoteDialogOpen(false); // Close dialog after successful submission
+    } catch (error) {
+      setAlert({ message: 'Error saving note', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditNote = (note) => {
+    setEditingNote(note);
+    setFormData({
+      title: note.title,
+      content: note.content,
+      category: note.category,
+      priority: note.priority
+    });
+    setNoteDialogOpen(true); // Show dialog when editing
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    setLoading(true);
+    try {
+      await notesAPI.deleteNote(noteId);
+      setNotes(prev => prev.filter(note => note.id !== noteId));
+      setAlert({ message: 'Note deleted successfully!', severity: 'success' });
+    } catch (error) {
+      setAlert({ message: 'Error deleting note', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartAddNote = () => {
+    setNoteDialogOpen(true);
+    setEditingNote(null);
+    setFormData({ title: '', content: '', category: 'general', priority: 'medium' });
+  };
+
+  const handleRequestDeleteNote = (noteId) => {
+    setNoteDeleteTarget(noteId);
+    setNoteConfirmDeleteOpen(true);
+  };
+
+  const handleConfirmDeleteNote = async () => {
+    if (noteDeleteTarget) {
+      setLoading(true);
+      await handleDeleteNote(noteDeleteTarget);
+      setNoteDeleteTarget(null);
+      setNoteConfirmDeleteOpen(false);
+      setLoading(false);
+    }
+  };
+
+  const handleToggleNoteCompleted = async (noteId) => {
+    setLoading(true);
+    try {
+      const response = await notesAPI.toggleCompletion(noteId);
+      setNotes(prev => prev.map(note => note.id === noteId ? response.data.data : note));
+      setNoteStatusAlert(true);
+    } catch (error) {
+      setAlert({ message: 'Error updating note status', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredNotes = notes.filter(note => {
+    if (categoryFilter !== 'all' && note.category !== categoryFilter) return false;
+    if (priorityFilter !== 'all' && note.priority !== priorityFilter) return false;
+    return true;
+  });
+
   // Show login screen if not logged in
   if (!isLoggedIn) {
     return (
@@ -360,15 +442,7 @@ function App() {
         <Typography variant="h4" sx={{ mb: 3 }}>
           Welcome to YouTube Companion Dashboard
         </Typography>
-        <Button
-          color="primary"
-          variant="contained"
-          startIcon={<GoogleIcon />}
-          onClick={handleGoogleLogin}
-          size="large"
-        >
-          Login with Google
-        </Button>
+        <LoginButton onClick={handleGoogleLogin} />
       </Box>
     );
   }
@@ -384,7 +458,6 @@ function App() {
     );
   }
 
-console.log(userProfile);
 
   // Toast close handler
   const handleAlertClose = (event, reason) => {
@@ -400,70 +473,14 @@ console.log(userProfile);
             YouTube Companion Dashboard
           </Typography>
           {isLoggedIn && userProfile && (
-            <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-              <Box
-                sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-                onClick={handleProfileMenuOpen}
-                aria-controls={openMenu ? 'profile-menu' : undefined}
-                aria-haspopup="true"
-                aria-expanded={openMenu ? 'true' : undefined}
-              >
-                <Avatar
-                  src={userProfile.avatarUrl}
-                  sx={{ width: 32, height: 32, mr: 1 }}
-                >
-                  {!userProfile.avatarUrl && userProfile.name && userProfile.name.charAt(0).toUpperCase()}
-                </Avatar>
-                <Typography
-                  variant="subtitle2"
-                  sx={{ fontWeight: 500 }}
-                >
-                  {userProfile.name}
-                </Typography>
-              </Box>
-              <Menu
-                id="profile-menu"
+            <UserProfileMenu
+              userProfile={userProfile}
                 anchorEl={anchorEl}
-                open={openMenu}
-                onClose={handleMenuClose}
-                PaperProps={{
-                  elevation: 4,
-                  sx: {
-                    borderRadius: 2,
-                    minWidth: 220,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                    mt: 1,
-                  },
-                }}
-                MenuListProps={{
-                  sx: { p: 0 },
-                }}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'right',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'right',
-                }}
-              >
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, px: 2 }}>
-                  <Avatar src={userProfile.avatarUrl} sx={{ width: 56, height: 56, mb: 1 }}>
-                    {!userProfile.avatarUrl && userProfile.name && userProfile.name.charAt(0).toUpperCase()}
-                  </Avatar>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, textAlign: 'center' }}>
-                    {userProfile.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                    {userProfile.email}
-                  </Typography>
-                </Box>
-                <Divider sx={{ my: 0.5 }} />
-                <MenuItem onClick={handleLogout} sx={{ fontWeight: 500, fontSize: 16, justifyContent: 'center', py: 1.5, color: 'primary.main' }}>
-                  <LogoutIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} /> Logout
-                </MenuItem>
-              </Menu>
-            </Box>
+              openMenu={openMenu}
+              handleProfileMenuOpen={handleProfileMenuOpen}
+              handleMenuClose={handleMenuClose}
+              handleLogout={handleLogout}
+            />
           )}
         </Toolbar>
       </AppBar>
@@ -478,29 +495,13 @@ console.log(userProfile);
           <Typography variant="h4" sx={{ mb: 3 }}>
             Welcome to YouTube Companion Dashboard
           </Typography>
-          <Button
-            color="primary"
-            variant="contained"
-            startIcon={<GoogleIcon />}
-            onClick={handleGoogleLogin}
-            size="large"
-          >
-            Login with Google
-          </Button>
+          <LoginButton onClick={handleGoogleLogin} />
         </Box>
       ) : (
         <Container maxWidth="md" sx={{ py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Card elevation={4} sx={{ borderRadius: 4, overflow: 'visible', mb: 4, width: '100%', maxWidth: 700 }}>
             <Box sx={{ position: 'relative', pt: '56.25%' }}>
-              {/* Responsive YouTube Player */}
-              <iframe
-                src={`https://www.youtube.com/embed/${videoData.id}`}
-                title={videoData.title}
-                style={{
-                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0, borderRadius: '16px 16px 0 0'
-                }}
-                allowFullScreen
-              />
+              <VideoPlayer videoId={videoData.id} title={videoData.title} />
               <Chip
                 label={videoData.status}
                 color={videoData.status === 'public' ? 'success' : 'warning'}
@@ -509,316 +510,138 @@ console.log(userProfile);
               />
             </Box>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                {editingTitle ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                    <TextField
-                      fullWidth
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <IconButton onClick={handleSaveTitle} disabled={loading}>
-                      {loading ? <CircularProgress size={20} /> : <SaveIcon />}
-                    </IconButton>
-                    <IconButton onClick={() => setEditingTitle(false)}>
-                      <CancelIcon />
-                    </IconButton>
-                  </Box>
-                ) : (
-                  <>
-                    <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ flex: 1 }}>
-                      {videoData.title}
-                    </Typography>
-                    <Tooltip title="Edit Title">
-                      <IconButton onClick={() => setEditingTitle(true)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </>
-                )}
-              </Box>
-              <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <VisibilityIcon fontSize="small" />
-                  <Typography variant="body2">{formatNumber(videoData.viewCount)} views</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ThumbUpIcon fontSize="small" />
-                  <Typography variant="body2">{formatNumber(videoData.likeCount)} likes</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CommentIcon fontSize="small" />
-                  <Typography variant="body2">{formatNumber(videoData.commentCount)} comments</Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary">
-                  {formatDate(videoData.publishedAt)}
-                </Typography>
-              </Box>
-              <Divider sx={{ my: 2 }} />
-              <Paper elevation={0} sx={{ bgcolor: 'background.paper', p: 2, borderRadius: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="h6" sx={{ flex: 1 }} gutterBottom>Description</Typography>
-                  {editingDescription ? null : (
-                    <IconButton onClick={() => setEditingDescription(true)}>
-                      <EditIcon />
-                    </IconButton>
-                  )}
-                </Box>
-                {editingDescription ? (
-                  <Box>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      value={newDescription}
-                      onChange={(e) => setNewDescription(e.target.value)}
-                      variant="outlined"
-                      sx={{ mb: 1 }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button 
-                        variant="contained" 
-                        onClick={handleSaveDescription}
-                        disabled={loading || !newDescription.trim()}
-                        startIcon={loading ? <CircularProgress size={16} /> : <SaveIcon />}
-                      >
-                        Save
-                      </Button>
-                      <Button 
-                        variant="outlined" 
-                        onClick={() => setEditingDescription(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
-                  </Box>
-                ) : (
-                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {videoData.description}
-                  </Typography>
-                )}
-              </Paper>
+              <VideoDetails
+                videoData={videoData}
+                editingTitle={editingTitle}
+                setEditingTitle={setEditingTitle}
+                newTitle={newTitle}
+                setNewTitle={setNewTitle}
+                handleSaveTitle={handleSaveTitle}
+                loading={loading}
+                editingDescription={editingDescription}
+                setEditingDescription={setEditingDescription}
+                newDescription={newDescription}
+                setNewDescription={setNewDescription}
+                handleSaveDescription={handleSaveDescription}
+                formatNumber={formatNumber}
+                formatDate={formatDate}
+              />
             </CardContent>
           </Card>
-          <Box sx={{ width: '100%', maxWidth: 700 }}>
-            <Paper elevation={3} sx={{ p: 3, borderRadius: 3, mb: 4, bgcolor: '#fff' }}>
-              <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 2 }}>
-                <Tab label="Comments" icon={<CommentIcon />} />
-                <Tab label="Notes" icon={<NoteIcon />} />
-              </Tabs>
-              {activeTab === 0 && (
-                <>
-                  <Typography variant="h6" gutterBottom>
-                    Comments ({comments.length})
-                  </Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={2}
-                      placeholder="Add a comment..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      sx={{ mb: 1 }}
-                    />
-                    <Button
-                      variant="contained"
-                      onClick={handleAddComment}
-                      disabled={!newComment.trim() || loading}
-                      startIcon={loading ? <CircularProgress size={16} /> : <AddIcon />}
-                      fullWidth
-                    >
-                      Add Comment
-                    </Button>
+          {/* Comments */}
+          <TabsPanel
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            tabs={[{
+              label: 'COMMENTS',
+              count: comments.length,
+              icon: <CommentIcon />,
+              content: <>
+                <CommentForm
+                  newComment={newComment}
+                  setNewComment={setNewComment}
+                  handleAddComment={handleAddComment}
+                  loading={loading}
+                />
+                <CommentList
+                  comments={comments}
+                  userProfile={userProfile}
+                  expandedReplies={expandedReplies}
+                  toggleReplies={toggleReplies}
+                  setReplyTo={setReplyTo}
+                  setOpenReplyDialog={setOpenReplyDialog}
+                  setDeleteTarget={setDeleteTarget}
+                  setConfirmDeleteOpen={setConfirmDeleteOpen}
+                  deletingId={null} // Removed deletingId
+                  onDelete={handleRequestDelete}
+                />
+              </>
+            }, {
+              label: 'NOTES',
+              count: notes.length,
+              icon: <NoteIcon />,
+              content: <>
+                <NotesHeader
+                  notesCount={notes.length}
+                  categoryFilter={categoryFilter}
+                  setCategoryFilter={setCategoryFilter}
+                  priorityFilter={priorityFilter}
+                  setPriorityFilter={setPriorityFilter}
+                  onAddNote={handleStartAddNote}
+                />
+                {noteStatusAlert && (
+                  <Box sx={{ width: '100%', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#e6f4ea', color: '#388e3c', borderRadius: 2, px: 3, py: 2, fontWeight: 600, fontSize: 18 }}>
+                      <CheckCircleIcon sx={{ mr: 1, fontSize: 28 }} />
+                      Note status updated!
+                    </Box>
                   </Box>
-                  <Divider sx={{ my: 2 }} />
-                  <List sx={{ maxHeight: 400, overflow: 'auto' }}>
-                    {comments.map((comment) => (
-                      <React.Fragment key={comment.id}>
-                        {/* Top-level comment */}
-                        <ListItem alignItems="flex-start" sx={{ px: 0 }}>
-                          <Avatar
-                            src={comment.isOwnerComment
-                              ? (!userProfile?.avatarUrl && userProfile?.name && userProfile.name.replace(/^@/, '').trim().charAt(0).toUpperCase())
-                              : (!comment.avatarUrl && comment.authorName && comment.authorName.replace(/^@/, '').trim().charAt(0).toUpperCase())}
-                            sx={{ mr: 2, bgcolor: 'primary.main', width: 40, height: 40 }}
-                          >
-                            {comment.isOwnerComment
-                              ? (!userProfile?.avatarUrl && userProfile?.name && userProfile.name.replace(/^@/, '').trim().charAt(0).toUpperCase())
-                              : (!comment.avatarUrl && comment.authorName && comment.authorName.replace(/^@/, '').trim().charAt(0).toUpperCase())}
-                          </Avatar>
-                          <ListItemText
-                            primary={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ bgcolor: '#eee', px: 1, borderRadius: 1 }}>
-                                  {comment.authorName}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatDate(comment.publishedAt)}
-                                </Typography>
-                              </Box>
-                            }
-                            secondary={
-                              <Typography variant="body2" sx={{ mt: 1 }}>
-                                {decodeHtmlEntities(comment.text)}
-                              </Typography>
-                            }
-                          />
-                          <ListItemSecondaryAction>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Tooltip title="Reply">
-                                <IconButton size="small" onClick={() => { setReplyTo(comment); setOpenReplyDialog(true); }}>
-                                  <ReplyIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              {comment.isOwnerComment && (
-                                <Tooltip title="Delete">
-                                  <IconButton size="small" onClick={() => {
-                                    setDeleteTarget({ id: comment.id, type: 'comment' });
-                                    setConfirmDeleteOpen(true);
-                                  }} color="error" disabled={deletingId === comment.id}>
-                                    {deletingId === comment.id ? <CircularProgress size={20} color="error" /> : <DeleteIcon fontSize="small" />}
-                                  </IconButton>
-                                </Tooltip>
-                              )}
-                            </Box>
-                          </ListItemSecondaryAction>
-                        </ListItem>
-                        {/* Replies toggle */}
-                        {Array.isArray(comment.replies) && comment.replies.length > 0 && (
-                          <Box sx={{ pl: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', mb: 1 }} onClick={() => toggleReplies(comment.id)}>
-                            <ReplyIcon fontSize="small" sx={{ color: 'primary.main', mr: 0.5 }} />
-                            <Typography variant="body2" color="primary" sx={{ fontWeight: 500, mr: 0.5 }}>
-                              {expandedReplies[comment.id] ? 'Hide' : `1 reply${comment.replies.length > 1 ? 'ies' : ''}`.replace('1 replyies', `${comment.replies.length} replies`)}
-                            </Typography>
-                            {expandedReplies[comment.id] ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                          </Box>
-                        )}
-                        {/* Replies (collapsible) */}
-                        <Collapse in={!!expandedReplies[comment.id]} timeout="auto" unmountOnExit>
-                          {(comment.replies || []).map((reply) => (
-                            <ListItem key={reply.id} sx={{ ml: 8, pl: 0, px: 0, bgcolor: '#f7f7f7', borderRadius: 2, my: 1, maxWidth:'88%' }}>
-                              <Avatar
-                                src={
-                                  reply.isOwnerComment
-                                    ? userProfile?.avatarUrl || undefined
-                                    : reply.avatarUrl || undefined
-                                }
-                                sx={{
-                                  mr: 2,
-                                  bgcolor: 'secondary.main',
-                                  width: 32,
-                                  height: 32,
-                                  marginLeft: '10px',
-                                }}
-                              >
-                                {
-                                  reply.isOwnerComment
-                                    ? (!userProfile?.avatarUrl &&
-                                      userProfile?.name?.replace(/^@/, '').trim().charAt(0).toUpperCase())
-                                    : (!reply.avatarUrl &&
-                                      reply.authorName?.replace(/^@/, '').trim().charAt(0).toUpperCase())
-                                }
-                              </Avatar>
-
-                              <ListItemText
-                                primary={
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Typography variant="subtitle2" fontWeight="bold" sx={{ bgcolor: '#dbd9d5', px: 1, borderRadius: 1 }}>
-                                      {reply.authorName}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                      {formatDate(reply.publishedAt)}
-                                    </Typography>
-                                  </Box>
-                                }
-                                secondary={
-                                  <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                    {decodeHtmlEntities(reply.text)}
-                                  </Typography>
-                                }
-                              />
-                              {reply.isOwnerComment && (
-                                <ListItemSecondaryAction>
-                                  <IconButton sx={{marginRight:'10px'}} size="small" onClick={() => {
-                                    setDeleteTarget({ id: reply.id, type: 'reply' });
-                                    setConfirmDeleteOpen(true);
-                                  }} color="error" disabled={deletingId === reply.id}>
-                                    {deletingId === reply.id ? <CircularProgress size={20} color="error" /> : <DeleteIcon fontSize="small" />}
-                                  </IconButton>
-                                </ListItemSecondaryAction>
-                              )}
-                            </ListItem>
-                          ))}
-                        </Collapse>
-                        <Divider sx={{ my: 1 }} />
-                      </React.Fragment>
-                    ))}
-                  </List>
-                </>
-              )}
-              {activeTab === 1 && (
-                <Notes videoId={videoId} />
-              )}
-            </Paper>
-          </Box>
-          {/* Reply Dialog */}
-          <Dialog open={openReplyDialog} onClose={() => setOpenReplyDialog(false)} maxWidth="sm" fullWidth>
-            <DialogTitle>
-              Reply to {replyTo?.author}
-            </DialogTitle>
-            <DialogContent>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                placeholder="Write your reply..."
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                variant="outlined"
-                sx={{ mt: 1 }}
-              />
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setOpenReplyDialog(false)}>Cancel</Button>
-              <Button 
-                onClick={() => handleAddReply(replyTo?.id)} 
-                variant="contained"
-                disabled={!replyText.trim() || loading}
-                startIcon={replyingId === replyTo?.id && loading ? <CircularProgress size={16} color="inherit" /> : null}
-              >
-                {replyingId === replyTo?.id && loading ? 'Replying...' : 'Reply'}
-              </Button>
-            </DialogActions>
-          </Dialog>
-          <Snackbar
-            open={!!alert}
-            autoHideDuration={3000}
-            onClose={handleAlertClose}
-            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-          >
-            {alert && (
-              <MuiAlert onClose={handleAlertClose} severity={alert.severity} sx={{ width: '100%' }} elevation={6} variant="filled">
-                {alert.message}
-              </MuiAlert>
-            )}
-          </Snackbar>
-          <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
-            <DialogTitle>Are you sure you want to delete this {deleteTarget?.type}?</DialogTitle>
-            <DialogActions>
-              <Button onClick={handleCancelDelete} disabled={confirmingDelete}>Cancel</Button>
-              <Button onClick={handleConfirmDelete} color="error" variant="contained" disabled={confirmingDelete} startIcon={confirmingDelete ? <CircularProgress size={16} color="inherit" /> : null}>
-                {confirmingDelete ? 'Deleting...' : 'Delete'}
-              </Button>
-            </DialogActions>
-          </Dialog>
+                )}
+                {filteredNotes.length === 0 ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {notes.length === 0
+                        ? 'No notes found. Create your first note to get started!'
+                        : 'No notes found for the selected filters.'}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <NotesList
+                    notes={filteredNotes}
+                    renderNoteItem={note => (
+                      <NoteItem
+                        note={note}
+                        onEdit={handleEditNote}
+                        onDelete={() => handleRequestDeleteNote(note.id)}
+                        onToggleCompleted={() => handleToggleNoteCompleted(note.id)}
+                      />
+                    )}
+                    header={null}
+                  />
+                )}
+              </>
+            }]}
+          />
+          <AlertMessage alert={alert} handleAlertClose={handleAlertClose} />
+          <NoteDialog
+            open={noteDialogOpen}
+            onClose={() => { setNoteDialogOpen(false); setEditingNote(null); }}
+            formData={formData}
+            setFormData={setFormData}
+            handleSubmit={handleNoteSubmit}
+            loading={loading}
+            editingNote={editingNote}
+          />
         </Container>
       )}
+      <ReplyDialog
+        open={openReplyDialog}
+        onClose={() => setOpenReplyDialog(false)}
+        replyTo={replyTo}
+        replyText={replyText}
+        setReplyText={setReplyText}
+        handleAddReply={handleAddReply}
+        loading={loading}
+        replyingId={null} // Removed replyingId
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        message={`Are you sure you want to delete this ${deleteTarget?.type || 'comment'}?`}
+        confirmText="DELETE"
+        cancelText="CANCEL"
+        loading={loading}
+      />
+      <ConfirmDialog
+        open={noteConfirmDeleteOpen}
+        onClose={() => setNoteConfirmDeleteOpen(false)}
+        onConfirm={handleConfirmDeleteNote}
+        message="Are you sure you want to delete this note?"
+        confirmText="DELETE"
+        cancelText="CANCEL"
+        loading={loading}
+      />
     </Box>
   );
 }
