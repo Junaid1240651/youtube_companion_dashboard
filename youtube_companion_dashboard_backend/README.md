@@ -55,11 +55,34 @@ The server will run on the port specified in your `.env` file (default: 3000).
 - Other Gmail accounts will not work unless added to the OAuth consent screen's test users.
 
 ## API Endpoints
-- `/auth/google` - Start Google OAuth login
-- `/auth/logout` - Logout and clear session
-- `/api/userinfo` - Get current user info
-- `/api/videos` - Video-related endpoints
-- `/api/:videoId/notes` - Notes endpoints
+
+### Authentication & User Info
+- `GET /auth/google` — Start Google OAuth login
+- `GET /auth/google/callback` — Google OAuth callback
+- `POST /auth/logout` — Logout and clear session
+- `GET /api/userinfo` — Get current user info
+- `GET /health` — Health check
+
+### Video Endpoints
+- `GET /api/videos/:videoId` — Get video details
+- `PUT /api/videos/:videoId` — Update video title/description
+
+### Comment Endpoints
+- `GET /api/videos/:videoId/comments` — Get comments for a video
+- `POST /api/videos/:videoId/comments` — Add a comment to a video
+- `POST /api/videos/comments/:commentId/replies` — Add a reply to a comment
+- `DELETE /api/videos/comments/:commentId` — Delete a comment
+- `DELETE /api/videos/comments/:replyId/reply` — Delete a reply
+
+### Notes Endpoints
+- `GET /api/:videoId/notes` — Get all notes for a video
+- `GET /api/:videoId/notes/category?category=...` — Get notes by category
+- `GET /api/:videoId/notes/priority?priority=...` — Get notes by priority
+- `POST /api/:videoId/notes` — Create a note for a video
+- `GET /api/notes/:noteId` — Get a single note by ID
+- `PUT /api/notes/:noteId` — Update a note
+- `DELETE /api/notes/:noteId` — Delete a note
+- `PATCH /api/notes/:noteId/toggle` — Toggle note completion
 
 ## CORS
 - Only requests from the deployed frontend URLs are allowed (see `index.js` for allowed origins).
