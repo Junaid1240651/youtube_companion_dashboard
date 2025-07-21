@@ -415,6 +415,10 @@ function App() {
       const response = await notesAPI.toggleCompletion(noteId);
       setNotes(prev => prev.map(note => note.id === noteId ? response.data.data : note));
       setNoteStatusAlert(true);
+      // Auto-hide the alert after 1 second
+      setTimeout(() => {
+        setNoteStatusAlert(false);
+      }, 2000);
     } catch (error) {
       setAlert({ message: 'Error updating note status', severity: 'error' });
     } finally {
@@ -443,6 +447,25 @@ function App() {
           Welcome to YouTube Companion Dashboard
         </Typography>
         <LoginButton onClick={handleGoogleLogin} />
+        <Box sx={{ mt: 3, textAlign: 'center', maxWidth: 400 }}>
+          <Typography variant="body2" color="error" sx={{ mb: 1, fontWeight: 500 }}>
+            As per Google OAuth policy, only whitelisted email addresses can log in via Google OAuth.<br/>
+            Other Gmail accounts will not work.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Please use the following whitelist account to login via Google OAuth:
+          </Typography>
+          <Typography variant="body2" sx={{ 
+            bgcolor: '#f5f5f5', 
+            p: 2, 
+            borderRadius: 1, 
+            fontFamily: 'monospace',
+            fontSize: '0.875rem'
+          }}>
+            Email: companiondashboard00@gmail.com<br/>
+            Password: companion_dashboard0786
+          </Typography>
+        </Box>
       </Box>
     );
   }
